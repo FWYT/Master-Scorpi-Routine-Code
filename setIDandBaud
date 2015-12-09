@@ -1,0 +1,122 @@
+
+// jbern_experiment.ino
+// 11/25/2015
+
+// // Results/Knowledge
+// - Baud rate key: {0: 9600, 1: 57600, 2: 115200, 3: 1Mbps}
+// - This code has been observed to either (i) works perfectly, or (ii) be unable to write or read Dxl's ID and baud rate.
+//   Solution observed to work: Power cycle the servo (unplug and plug back in).
+// - Red blinking light on servo means it's not getting enough power.  Tech support says this is bad for the servos.
+
+// // TODO
+// - When you change the servo ID, does the baud rate become 3:1Mbps? (NOTE: I think it does, but haven't confirmed).
+// - Write a function to reset a servo with a messed up baud rate and/or id that tries every baud rate, sets the id/baud rate to the defaults, notifies you it's done, and proves that it was successful.
+// - Get RoboPlus Dynamixiel Wizard working/recognizing the OpenCM board and the XL-320's.
+//   NOTE: To do this you need to load l_DxlTosser onto the OpenCM board before you start RoboPlus.
+//         The tech support lady seemed a little unclear on whether this would make your board unable to control motors unless you restored the firmware or something.
+//         I wouldn't try it without having tech support on the phone and/or a spare board on hand.
+// - Can we set baud rate using BROADCAST_ID?  (Probably, just haven't tried.)
+
+// // Misc Best Practices/Voodoo
+// - Let's use 3:1Mps as our goto baud rate until we find a reason not to.
+// - Always have batteries charged (LED _off_) before use.
+// - If driving a servo, always have batteries attached and switch set to "+".
+// - Try to avoid driving the motors excessively to avoid wearing down the gears.
+// - When in doubt power cycle.
+// - Save before downloading to the board
+
+// // Misc References
+// NOTE: Actually copy and paste links, OpenCM IDE messes up opening links somehow. :\
+// - Looks real useful: http://www.robotsource.org/bs/bd.php?bt=forum_CM9DeveloperWorld&bt_id=662
+// - Worrisome: http://forums.trossenrobotics.com/showthread.php?7557-Darwin-Mini-OpenCM-9-04-power-on-trouble
+
+#define DXL_BUS_SERIAL1 1  //Dynamixel on Serial1(USART1)  <-OpenCM9.04
+#define ID_NUM BROADCAST_ID
+
+// BEGIN CONTROL TABLE DEFINES
+// NOTE: These are constants for using write/readByte
+// NOTE: See: http://support.robotis.com/en/product/dynamixel/xl-series/xl-320.htm
+#define LED 25
+#define ID 3
+#define BAUD_RATE 4
+// END CONTROL TABLE DEFINES
+
+// Goal: Let's set the ID's to 1 and the BR's (baud rates) to 3.
+#define DEFAULT_ID 1
+#define DEFAULT_BR 3
+
+Dynamixel Dxl(DXL_BUS_SERIAL1);
+
+// Less aggressive testing function than running the servo back and forth.
+// NOTE: Only works if baud rate is correct, exits with LED _off_.
+void strobe_servo_led(int id) {
+  for (int j = 0; j != 5; ++j) {
+    for (int i = 7; i != -1; --i) {
+      Dxl.writeByte(id, LED, i);
+      delay(100);
+    }
+  }
+}
+
+// More aggressive testing function than running the servo back and forth.
+// NOTE: Only works if baud rate is correct, exits with servo zeroed (probably).
+void strobe_goal_position(int id) {
+  Dxl.goalPosition(id, 1);
+  delay(2000);
+  Dxl.goalPosition(id, 1023);
+  delay(2000);
+  Dxl.goalPosition(id, 512);
+  delay(2000);
+}
+
+// NOTE: Uses BROADCAST_ID to set.
+void set_id(int id) {
+    Dxl.writeByte(BROADCAST_ID, ID, id);
+}
+
+void set_br(int id, int br) {
+    Dxl.writeByte(id, BAUD_RATE, br);
+}
+
+void setup() {
+  // NOTE: These delays may actually be the solution.  This is terrifying.
+  delay(1000);
+  Dxl.begin(3); // NOTE: Need to start this with servo's baud rate to make changes to that servo.
+  delay(1000);
+  
+  // NOTE: Uncomment this to test if you have the right baud rate (uses BROADCAST_ID, so you don't have to have the id right)
+  // strobe_servo_led(BROADCAST_ID);
+  
+  // TODO: Some code I found online has this command.  I have no idea what it does.
+  //       It may come up when you want to both monitor serial _and_ drive servos?
+  //Serial2.begin(9600);
+  //delay(1000);
+
+  // NOTE: These delays are more on the voodoo side.  I wouldn't remove them until we really have stuff working though.
+  set_id(DEFAULT_ID);
+  delay(1000);
+  set_br(DEFAULT_ID, DEFAULT_BR);
+  delay(1000);
+  
+  //Dxl.jointMode(DEFAULT_ID);
+  strobe_servo_led(DEFAULT_ID);
+  //strobe_goal_position(DEFAULT_ID);
+}
+
+void loop() {
+  // Set this to 1 if you want to verify that the print calls are actually being made (will print 255 if something's wrong => try power cycling).
+  int FORCE_VIEW_SERIAL = 1;
+  
+  // NOTE: Ctrl + Shift + M to view Serial output
+  // NOTE: These will only print if you've got the baud rate and id correct everywhere (or if you've set FORCE_VIEW_SERIAL to 1).
+  unsigned char id_str = Dxl.readByte(DEFAULT_ID, ID);
+  unsigned char br_str = Dxl.readByte(DEFAULT_ID, BAUD_RATE);
+  if (id_str != 255 || FORCE_VIEW_SERIAL) {
+    SerialUSB.print("ID: ");
+    SerialUSB.println(id_str);
+  }
+  if (br_str != 255 || FORCE_VIEW_SERIAL) {
+    SerialUSB.print("Baud Rate: ");
+    SerialUSB.println(br_str);
+  }
+}
